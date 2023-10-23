@@ -1,3 +1,10 @@
+class CheckError:
+    def parse_bits(self):
+        while len(self.data) > 0:
+            self.bits.append(self.data[:self.bit_length])
+            self.data = self.data[self.bit_length:]
+
+
 class SimpleParity:
     def __init__(self, a, b):
         self.a = a
@@ -43,10 +50,11 @@ class SimpleParity:
         return 'Codeword:%s\nData word: %s' % (self.codeword, self.dataword)
 
 
-class TwoDParity:
+class TwoDParity(CheckError):
     def __init__(self, data):
         self.data = data
         self.error_count = 0
+        self.bit_length = 9
         self.bits = []
         self.simulate()
 
@@ -77,42 +85,108 @@ class TwoDParity:
             if (col_sum % 2 == 0 and int(parity_row[col]) == 1) or (col_sum % 2 != 0 and int(parity_row[col]) == 0):
                 self.error_count += 1
 
-    def parse_bits(self):
-        while len(self.data) > 0:
-            self.bits.append(self.data[:9])
-            self.data = self.data[9:]
-
     def __str__(self):
         return 'Error count: %s' % (self.error_count)
 
 
-class Checksum:
-    def __init__(self, data, keyword):
+class Checksum(CheckError):
+    def __init__(self, data):
         self.data = data
-        self.keyword = keyword
+        self.bit_length = 8
+        self.bits = []
+        self.checksum = ''
+        self.sum = ''
+        self.simulate()
+
+    def simulate(self):
+        self.parse_bits()
+        self.checksum = self.get_sum(self.bits[:-1])
+        self.sum = self.get_sum([self.bits[-1], self.checksum])
+
+    def get_sum(self, bits):
+        while len(bits) > 1:
+            bit_sum = self.add_bits(bits[0], bits[1])
+            if len(bit_sum) > self.bit_length:
+                bits[0], bits[1] = bit_sum[:8][::-1], bit_sum[8:].zfill(8)
+            else:
+                bits = [bit_sum[::-1]] + bits[2:]
+
+        return bit_sum[::-1]
+
+    def add_bits(self, row_1, row_2):
+        bit_sum = ''
+        carry = 0
+        for col in range(self.bit_length):
+            col_sum = int(row_1[self.bit_length-col-1]) + \
+                int(row_2[self.bit_length-col-1]) + carry
+
+            if col_sum < 2:
+                carry = 0
+                bit_sum += str(col_sum)
+            else:
+                carry = 1
+                if col_sum % 2 == 0:
+                    bit_sum += '0'
+                else:
+                    bit_sum += '1'
+
+        if carry:
+            bit_sum += '1'
+
+        return bit_sum
+
+    def __str__(self):
+        return 'Accept data' if self.sum == '11111111' else 'Reject Data'
 
 
 class CRC:
-    def __init__(self):
-        pass
+    def __init__(self, data, keyword):
+        self.keyword = keyword
+        self.data = data[len(self.keyword) - 1:]
+        self.remainder = data[:len(self.keyword) - 1]
+        self.simulate()
+
+    def simulate(self):
+        kw_len = len(self.keyword)
+
+        while len(self.data) > 0:
+            self.remainder += self.data[0]
+            self.data = self.data[1:]
+            if self.remainder[0] == '1':
+                self.remainder = self.get_xor(self.keyword)
+            else:
+                zero_bits = '0' * kw_len
+                self.remainder = self.get_xor(zero_bits)
+
+    def get_xor(self, curr_bits):
+        kw_len = len(self.keyword)
+        xor = ''
+        for i in range(1, kw_len):
+            xor += str(int(self.remainder[i]) ^ int(curr_bits[i]))
+
+        return xor
+
+    def __str__(self):
+        return 'Accept data' if self.remainder == '000' else 'Reject data'
 
 
 def get_result():
-    # p = int(input())
-    p = 2
+    p = int(input())
+
     if p == 1:
-        # a = input()
-        # b = input()
-        a = '10010010'
-        b = '100100101'
+        a = input()
+        b = input()
         return SimpleParity(a, b)
     elif p == 2:
-        data = '101100111101010111010110100110101011100101111'
+        data = input()
         return TwoDParity(data)
     elif p == 3:
-        return
+        data = input()
+        return Checksum(data)
     elif p == 4:
-        return
+        data = input()
+        keyword = input()
+        return CRC(data, keyword)
 
 
 def main():
